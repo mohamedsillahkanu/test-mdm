@@ -4,200 +4,124 @@
     <title>MDM Dashboard</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        header {
-            background: #2196f3;
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .stat-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .stat-value {
-            font-size: 36px;
-            font-weight: bold;
-            color: #2196f3;
-        }
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        button {
-            background: #2196f3;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin: 5px;
-        }
-        button:hover {
-            background: #1976d2;
-        }
-        .device-list {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .device-list th {
-            text-align: left;
-            padding: 10px;
-            background: #f5f5f5;
-        }
-        .device-list td {
-            padding: 10px;
-            border-bottom: 1px solid #eee;
-        }
-        .status-badge {
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .status-active {
-            background: #4caf50;
-            color: white;
-        }
-        .status-locked {
-            background: #f44336;
-            color: white;
-        }
-        .qr-container {
-            text-align: center;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 500px;
-            width: 90%;
-        }
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background: #4caf50;
-            color: white;
-            border-radius: 5px;
-            display: none;
-        }
+        body { font-family: Arial; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: white; padding: 20px; margin: 10px 0; border-radius: 8px; }
+        button { background: #2196f3; color: white; border: none; padding: 10px; margin: 5px; cursor: pointer; }
+        .device { border: 1px solid #ddd; padding: 10px; margin: 5px 0; }
+        .status { padding: 5px; border-radius: 4px; display: inline-block; }
+        .active { background: #4caf50; color: white; }
+        .locked { background: #f44336; color: white; }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📱 Mobile Device Management</h1>
-            <div>
-                <button onclick="showQRModal()">📷 Generate QR</button>
-                <button onclick="showAddDeviceModal()">➕ Add Device</button>
-            </div>
-        </header>
-
-        <div class="stats" id="stats">
-            <div class="stat-card">
-                <div class="stat-value" id="totalDevices">0</div>
-                <div>Total Devices</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="activeDevices">0</div>
-                <div>Active Devices</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="lockedDevices">0</div>
-                <div>Locked Devices</div>
-            </div>
+        <h1>📱 MDM Dashboard</h1>
+        
+        <div class="card">
+            <h3>Step 1: Enter Backend URL</h3>
+            <input type="text" id="apiUrl" value="YOUR_BACKEND_URL" style="width: 300px; padding: 5px;">
+            <button onclick="connect()">Connect</button>
+            <p id="status"></p>
         </div>
 
         <div class="card">
-            <h2>Managed Devices</h2>
-            <table class="device-list">
-                <thead>
-                    <tr>
-                        <th>Device Name</th>
-                        <th>Status</th>
-                        <th>Last Seen</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="deviceList"></tbody>
-            </table>
+            <h3>Step 2: Generate QR Code</h3>
+            <button onclick="generateQR()">Generate QR</button>
+            <div id="qrDisplay" style="margin-top: 20px;"></div>
         </div>
-    </div>
 
-    <!-- QR Code Modal -->
-    <div class="modal" id="qrModal">
-        <div class="modal-content">
-            <h3>📷 Scan to Enroll Android Device</h3>
-            <div id="qrDisplay" class="qr-container">
-                <p>Click generate to create QR code</p>
-            </div>
-            <button onclick="generateQR()">Generate QR Code</button>
-            <button onclick="closeQRModal()">Close</button>
-            <p><small>On a new Android, tap welcome screen 6 times to scan</small></p>
-        </div>
-    </div>
-
-    <!-- Add Device Modal -->
-    <div class="modal" id="addDeviceModal">
-        <div class="modal-content">
-            <h3>Add Device Manually</h3>
-            <input type="text" id="deviceName" placeholder="Device Name" style="width: 100%; padding: 10px; margin: 10px 0;">
+        <div class="card">
+            <h3>Step 3: Add Test Device</h3>
+            <input type="text" id="deviceName" placeholder="Device Name">
             <button onclick="addDevice()">Add Device</button>
-            <button onclick="closeAddDeviceModal()">Cancel</button>
+        </div>
+
+        <div class="card">
+            <h3>Your Devices</h3>
+            <div id="deviceList"></div>
         </div>
     </div>
 
-    <!-- Notification -->
-    <div class="notification" id="notification"></div>
-
-    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
-    <script src="config.js"></script>
-    <script src="dashboard.js"></script>
+    <script>
+        let API_URL = '';
+
+        function connect() {
+            API_URL = document.getElementById('apiUrl').value;
+            fetch(API_URL + '/api/health')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('status').innerHTML = '✅ Connected!';
+                    loadDevices();
+                })
+                .catch(err => {
+                    document.getElementById('status').innerHTML = '❌ Connection failed';
+                });
+        }
+
+        async function generateQR() {
+            const res = await fetch(API_URL + '/api/generate-qr', {
+                method: 'POST'
+            });
+            const data = await res.json();
+            
+            const qrDiv = document.getElementById('qrDisplay');
+            qrDiv.innerHTML = '';
+            QRCode.toCanvas(JSON.parse(data.qrData), { width: 250 }, (err, canvas) => {
+                if (err) console.error(err);
+                else qrDiv.appendChild(canvas);
+            });
+        }
+
+        async function addDevice() {
+            const name = document.getElementById('deviceName').value || 'Test Phone';
+            const res = await fetch(API_URL + '/api/enroll-device', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ deviceName: name })
+            });
+            if (res.ok) {
+                alert('Device added!');
+                loadDevices();
+            }
+        }
+
+        async function loadDevices() {
+            if (!API_URL) return;
+            const res = await fetch(API_URL + '/api/devices');
+            const devices = await res.json();
+            
+            const list = document.getElementById('deviceList');
+            if (devices.length === 0) {
+                list.innerHTML = '<p>No devices yet. Add one above.</p>';
+                return;
+            }
+            
+            list.innerHTML = devices.map(d => `
+                <div class="device">
+                    <strong>${d.name}</strong>
+                    <span class="status ${d.status}">${d.status}</span>
+                    <br>
+                    <small>Last seen: ${new Date(d.lastSeen).toLocaleString()}</small>
+                    <br>
+                    ${d.status === 'active' 
+                        ? `<button onclick="lockDevice('${d.id}')">🔒 Lock</button>`
+                        : `<button onclick="unlockDevice('${d.id}')">🔓 Unlock</button>`
+                    }
+                </div>
+            `).join('');
+        }
+
+        async function lockDevice(id) {
+            await fetch(API_URL + '/api/lock-device/' + id, { method: 'POST' });
+            loadDevices();
+        }
+
+        async function unlockDevice(id) {
+            await fetch(API_URL + '/api/unlock-device/' + id, { method: 'POST' });
+            loadDevices();
+        }
+    </script>
 </body>
 </html>
