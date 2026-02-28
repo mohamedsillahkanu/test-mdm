@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mdm-production-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: PORT
+        value: 10000
+    healthCheckPath: /api/health
+    autoDeploy: true
