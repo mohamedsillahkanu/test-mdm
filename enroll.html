@@ -1,0 +1,49 @@
+// Web enrollment endpoint
+app.post('/api/device/enroll-web', (req, res) => {
+    const { device_info } = req.body;
+    const deviceId = uuidv4();
+    const now = new Date().toISOString();
+    
+    db.run(
+        `INSERT INTO devices (
+            id, device_id, name, type, model, os_version, 
+            status, last_seen, user_name, enrolled_at, 
+            battery_level, ip_address, storage_used, location
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            deviceId,
+            device_info.device_id,
+            device_info.name,
+            'Mobile Web',
+            device_info.model || 'Unknown',
+            device_info.os_version || 'Unknown',
+            'active',
+            now,
+            device_info.name.split("'")[0] || 'User',
+            now,
+            device_info.battery_level || 0,
+            device_info.ip_address || 'Unknown',
+            device_info.storage || 'Unknown',
+            'Web Enrollment'
+        ],
+        function(err) {
+            if (err) {
+                console.error(err);
+                res.status(500).json({ error: err.message });
+                return;
+            }
+            
+            // Log activity
+            db.run(
+                'INSERT INTO activity_logs (id, action, device_id, details, ip_address, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [uuidv4(), 'web_enroll', deviceId, `Device enrolled via web: ${device_info.name}`, req.ip, now]
+            );
+            
+            res.json({ 
+                success: true, 
+                device_id: deviceId,
+                message: 'Device enrolled successfully'
+            });
+        }
+    );
+});
