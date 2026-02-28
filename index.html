@@ -49,6 +49,20 @@
             background: #f0f0f0;
         }
         
+        .logout-btn {
+            background: transparent;
+            color: white;
+            border: 1px solid white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -105,6 +119,8 @@
         
         .activity-list {
             list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
         }
         
         .activity-item {
@@ -112,6 +128,7 @@
             border-bottom: 1px solid #eee;
             display: flex;
             justify-content: space-between;
+            font-size: 14px;
         }
         
         .activity-item:last-child {
@@ -139,6 +156,7 @@
             border-radius: 15px;
             font-size: 12px;
             font-weight: bold;
+            display: inline-block;
         }
         
         .status-active {
@@ -175,6 +193,11 @@
             color: white;
         }
         
+        .ping-btn {
+            background: #2196f3;
+            color: white;
+        }
+        
         .modal {
             display: none;
             position: fixed;
@@ -185,6 +208,7 @@
             background: rgba(0,0,0,0.5);
             align-items: center;
             justify-content: center;
+            z-index: 1000;
         }
         
         .modal-content {
@@ -192,10 +216,12 @@
             padding: 30px;
             border-radius: 10px;
             width: 400px;
+            max-width: 90%;
         }
         
         .modal-content h3 {
             margin-bottom: 20px;
+            color: #333;
         }
         
         .modal-content input, .modal-content select {
@@ -204,6 +230,7 @@
             margin-bottom: 15px;
             border: 1px solid #ddd;
             border-radius: 5px;
+            font-size: 14px;
         }
         
         .modal-buttons {
@@ -217,6 +244,7 @@
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            font-size: 14px;
         }
         
         .save-btn {
@@ -239,6 +267,7 @@
             border-radius: 5px;
             display: none;
             animation: slideIn 0.3s;
+            z-index: 1001;
         }
         
         @keyframes slideIn {
@@ -257,14 +286,29 @@
             bottom: 20px;
             right: 20px;
             padding: 10px 15px;
-            background: #ff9800;
+            background: #4caf50;
             color: white;
             border-radius: 5px;
             font-size: 12px;
+            z-index: 1000;
         }
         
-        .backend-status.connected {
-            background: #4caf50;
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error-message {
+            color: #f44336;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
     </style>
 </head>
@@ -272,7 +316,10 @@
     <div class="container">
         <header>
             <h1>📱 Mobile Device Management</h1>
-            <button class="enroll-btn" onclick="showEnrollModal()">+ Enroll Device</button>
+            <div class="header-buttons">
+                <button class="enroll-btn" onclick="showEnrollModal()">+ Enroll Device</button>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
         </header>
         
         <div class="stats-grid" id="stats">
@@ -313,21 +360,34 @@
         
         <div class="card">
             <h2>Managed Devices</h2>
-            <table class="device-list" id="deviceTable">
+            <table class="device-list">
                 <thead>
                     <tr>
                         <th>Device</th>
                         <th>Type</th>
                         <th>User</th>
                         <th>Status</th>
+                        <th>Battery</th>
                         <th>Last Seen</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="deviceList">
-                    <tr><td colspan="6">Loading devices...</td></tr>
+                    <tr><td colspan="7" class="loading">Loading devices...</td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+    
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <h3>🔐 MDM Login</h3>
+            <input type="text" id="loginUsername" placeholder="Username" value="admin">
+            <input type="password" id="loginPassword" placeholder="Password" value="Admin@123">
+            <div class="modal-buttons">
+                <button class="save-btn" onclick="handleLogin()">Login</button>
+            </div>
         </div>
     </div>
     
@@ -341,6 +401,8 @@
                 <option value="iPad">iPad</option>
                 <option value="Android Phone">Android Phone</option>
                 <option value="Android Tablet">Android Tablet</option>
+                <option value="Windows Laptop">Windows Laptop</option>
+                <option value="MacBook">MacBook</option>
             </select>
             <input type="text" id="deviceUser" placeholder="User Name" value="User">
             <div class="modal-buttons">
@@ -354,184 +416,280 @@
     <div class="notification" id="notification"></div>
     
     <!-- Backend Status -->
-    <div class="backend-status" id="backendStatus">⚠️ Backend Disconnected</div>
-    
+    <div class="backend-status" id="backendStatus">⚠️ Checking connection...</div>
+
     <script>
-        // Configuration
-        const API_URL = 'http://localhost:3000/api'; // Change this to your backend URL
+        // Configuration - CHANGE THIS TO YOUR REPLIT URL
+        const API_URL = 'https://test-mdm--sillahmohamedka.replit.app/api';
         
-        // Check backend connection
-        async function checkBackend() {
+        // State
+        let authToken = localStorage.getItem('mdm_token');
+        let refreshInterval;
+
+        // ==================== AUTHENTICATION ====================
+        
+        async function login(username, password) {
             try {
-                const response = await fetch(`${API_URL}/stats`);
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
                 if (response.ok) {
-                    document.getElementById('backendStatus').textContent = '✅ Backend Connected';
-                    document.getElementById('backendStatus').classList.add('connected');
+                    authToken = data.token;
+                    localStorage.setItem('mdm_token', authToken);
+                    hideLoginModal();
+                    checkBackendStatus();
+                    loadDashboard();
+                    showNotification('Login successful!', 'success');
+                    return true;
+                } else {
+                    showNotification(data.error || 'Invalid credentials', 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showNotification('Connection error - is backend running?', 'error');
+                return false;
+            }
+        }
+
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('mdm_token');
+            showLoginModal();
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        }
+
+        // ==================== API REQUEST HELPER ====================
+        
+        async function apiRequest(endpoint, options = {}) {
+            if (!authToken) {
+                showLoginModal();
+                return null;
+            }
+            
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                ...options.headers
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}${endpoint}`, { 
+                    ...options, 
+                    headers,
+                    mode: 'cors'
+                });
+                
+                if (response.status === 401) {
+                    // Token expired
+                    localStorage.removeItem('mdm_token');
+                    authToken = null;
+                    showLoginModal();
+                    showNotification('Session expired. Please login again.', 'warning');
+                    return null;
+                }
+                
+                return response;
+            } catch (error) {
+                console.error('API request error:', error);
+                showNotification('Network error - cannot reach backend', 'error');
+                return null;
+            }
+        }
+
+        // ==================== BACKEND STATUS ====================
+        
+        async function checkBackendStatus() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('backendStatus').textContent = `✅ Backend Connected (${data.environment})`;
+                    document.getElementById('backendStatus').style.background = '#4caf50';
                     return true;
                 }
             } catch (error) {
-                console.error('Backend connection failed:', error);
+                document.getElementById('backendStatus').textContent = '❌ Backend Disconnected';
+                document.getElementById('backendStatus').style.background = '#f44336';
             }
-            document.getElementById('backendStatus').textContent = '⚠️ Backend Disconnected (Run node server.js)';
-            document.getElementById('backendStatus').classList.remove('connected');
             return false;
         }
+
+        // ==================== DASHBOARD DATA ====================
         
-        // Load dashboard data
         async function loadDashboard() {
-            if (!await checkBackend()) {
-                // Show demo data if backend not available
-                document.getElementById('totalDevices').textContent = '4';
-                document.getElementById('activeDevices').textContent = '2';
-                document.getElementById('lockedDevices').textContent = '1';
-                document.getElementById('activeAlerts').textContent = '3';
-                
-                document.getElementById('activity').innerHTML = `
-                    <li class="activity-item">
-                        <span>Device Locked: Mike's Pixel</span>
-                        <small>Just now</small>
-                    </li>
-                    <li class="activity-item">
-                        <span>Device Enrolled: Lisa's iPhone</span>
-                        <small>30 minutes ago</small>
-                    </li>
-                    <li class="activity-item">
-                        <span>App Blocked: John's iPhone</span>
-                        <small>1 hours ago</small>
-                    </li>
-                `;
-                
-                document.getElementById('deviceList').innerHTML = `
-                    <tr>
-                        <td>Mike's Pixel</td>
-                        <td>Android</td>
-                        <td>Mike</td>
-                        <td><span class="status-badge status-locked">Locked</span></td>
-                        <td>Just now</td>
-                        <td>
-                            <button class="command-btn unlock-btn" onclick="showNotification('Demo mode - Start backend to enable')">Unlock</button>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Lisa's iPhone</td>
-                        <td>iOS</td>
-                        <td>Lisa</td>
-                        <td><span class="status-badge status-active">Active</span></td>
-                        <td>30 min ago</td>
-                        <td>
-                            <button class="command-btn lock-btn" onclick="showNotification('Demo mode - Start backend to enable')">Lock</button>
-                        </td>
-                    </tr>
-                `;
+            if (!authToken) {
+                showLoginModal();
                 return;
             }
             
             try {
                 // Load stats
-                const statsRes = await fetch(`${API_URL}/stats`);
-                const stats = await statsRes.json();
-                document.getElementById('totalDevices').textContent = stats.total || 0;
-                document.getElementById('activeDevices').textContent = stats.active || 0;
-                document.getElementById('lockedDevices').textContent = stats.locked || 0;
-                document.getElementById('activeAlerts').textContent = stats.alerts || 0;
-                
-                // Load activity
-                const activityRes = await fetch(`${API_URL}/activity`);
-                const activities = await activityRes.json();
-                document.getElementById('activity').innerHTML = activities.map(a => `
-                    <li class="activity-item">
-                        <span>${a.action}: ${a.name}</span>
-                        <small>${new Date(a.time).toLocaleString()}</small>
-                    </li>
-                `).join('');
+                const statsRes = await apiRequest('/stats');
+                if (statsRes && statsRes.ok) {
+                    const stats = await statsRes.json();
+                    document.getElementById('totalDevices').textContent = stats.total || 0;
+                    document.getElementById('activeDevices').textContent = stats.active || 0;
+                    document.getElementById('lockedDevices').textContent = stats.locked || 0;
+                    document.getElementById('activeAlerts').textContent = stats.alerts || 0;
+                }
                 
                 // Load devices
-                const devicesRes = await fetch(`${API_URL}/devices`);
-                const devices = await devicesRes.json();
-                document.getElementById('deviceList').innerHTML = devices.map(d => `
-                    <tr>
-                        <td>${d.name}</td>
-                        <td>${d.type}</td>
-                        <td>${d.user || '-'}</td>
-                        <td><span class="status-badge status-${d.status}">${d.status}</span></td>
-                        <td>${new Date(d.last_seen).toLocaleString()}</td>
-                        <td>
-                            ${d.status !== 'locked' ? 
-                                `<button class="command-btn lock-btn" onclick="sendCommand('${d.id}', 'lock')">Lock</button>` : 
-                                `<button class="command-btn unlock-btn" onclick="sendCommand('${d.id}', 'unlock')">Unlock</button>`
-                            }
-                            <button class="command-btn" onclick="sendCommand('${d.id}', 'ping')">Ping</button>
-                        </td>
-                    </tr>
-                `).join('');
+                const devicesRes = await apiRequest('/devices');
+                if (devicesRes && devicesRes.ok) {
+                    const devices = await devicesRes.json();
+                    renderDevices(devices);
+                }
+                
+                // Load activity
+                const activityRes = await apiRequest('/activity');
+                if (activityRes && activityRes.ok) {
+                    const activities = await activityRes.json();
+                    renderActivity(activities);
+                }
                 
             } catch (error) {
-                console.error('Error loading data:', error);
-                showNotification('Error loading data from backend');
+                console.error('Error loading dashboard:', error);
             }
         }
+
+        function renderDevices(devices) {
+            const tbody = document.getElementById('deviceList');
+            
+            if (!devices || devices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="loading">No devices enrolled</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = devices.map(device => `
+                <tr>
+                    <td>${device.name || 'Unknown'}</td>
+                    <td>${device.type || 'Unknown'}</td>
+                    <td>${device.user_name || '-'}</td>
+                    <td>
+                        <span class="status-badge status-${device.status || 'inactive'}">
+                            ${device.status || 'inactive'}
+                        </span>
+                    </td>
+                    <td>${device.battery_level || '?'}%</td>
+                    <td>${new Date(device.last_seen).toLocaleString()}</td>
+                    <td>
+                        ${device.status !== 'locked' ? 
+                            `<button class="command-btn lock-btn" onclick="sendCommand('${device.id}', 'lock')">🔒 Lock</button>` : 
+                            `<button class="command-btn unlock-btn" onclick="sendCommand('${device.id}', 'unlock')">🔓 Unlock</button>`
+                        }
+                        <button class="command-btn ping-btn" onclick="sendCommand('${device.id}', 'ping')">📡 Ping</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderActivity(activities) {
+            const list = document.getElementById('activity');
+            
+            if (!activities || activities.length === 0) {
+                list.innerHTML = '<li class="activity-item">No recent activity</li>';
+                return;
+            }
+            
+            list.innerHTML = activities.map(activity => `
+                <li class="activity-item">
+                    <span>
+                        <strong>${activity.action}:</strong> ${activity.device_name || 'Unknown'}
+                        ${activity.details ? `<br><small>${activity.details}</small>` : ''}
+                    </span>
+                    <small>${new Date(activity.time).toLocaleTimeString()}</small>
+                </li>
+            `).join('');
+        }
+
+        // ==================== DEVICE COMMANDS ====================
         
-        // Send command to device
         async function sendCommand(deviceId, command) {
-            if (!await checkBackend()) {
-                showNotification('Start the backend server first (node server.js)');
+            if (!authToken) {
+                showLoginModal();
                 return;
             }
             
             try {
-                const response = await fetch(`${API_URL}/devices/${deviceId}/command`, {
+                const response = await apiRequest(`/devices/${deviceId}/command`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command })
                 });
                 
-                if (response.ok) {
-                    showNotification(`Command "${command}" sent successfully`);
+                if (response && response.ok) {
+                    const result = await response.json();
+                    showNotification(`✅ ${result.message || `Command "${command}" sent`}`, 'success');
                     setTimeout(loadDashboard, 2000); // Reload after command completes
                 } else {
-                    showNotification('Failed to send command');
+                    showNotification(`❌ Failed to send command`, 'error');
                 }
             } catch (error) {
                 console.error('Error sending command:', error);
-                showNotification('Error sending command');
+                showNotification('Error sending command', 'error');
             }
         }
+
+        // ==================== DEVICE ENROLLMENT ====================
         
-        // Enroll new device
         async function enrollDevice() {
-            if (!await checkBackend()) {
-                showNotification('Start the backend server first (node server.js)');
+            if (!authToken) {
+                showLoginModal();
                 return;
             }
             
             const device = {
                 name: document.getElementById('deviceName').value,
                 type: document.getElementById('deviceType').value,
-                user: document.getElementById('deviceUser').value
+                user_name: document.getElementById('deviceUser').value,
+                model: 'Generic',
+                os_version: '1.0'
             };
             
             try {
-                const response = await fetch(`${API_URL}/devices/enroll`, {
+                const response = await apiRequest('/devices/enroll', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(device)
                 });
                 
-                if (response.ok) {
-                    showNotification('Device enrolled successfully');
+                if (response && response.ok) {
+                    const result = await response.json();
+                    showNotification(`✅ Device enrolled successfully`, 'success');
                     hideEnrollModal();
                     loadDashboard();
                 } else {
-                    showNotification('Failed to enroll device');
+                    const error = await response?.json();
+                    showNotification(error?.error || 'Failed to enroll device', 'error');
                 }
             } catch (error) {
                 console.error('Error enrolling device:', error);
-                showNotification('Error enrolling device');
+                showNotification('Error enrolling device', 'error');
             }
         }
+
+        // ==================== UI HELPERS ====================
         
-        // UI Helpers
+        function showLoginModal() {
+            document.getElementById('loginModal').style.display = 'flex';
+        }
+        
+        function hideLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+        }
+        
         function showEnrollModal() {
+            if (!authToken) {
+                showLoginModal();
+                return;
+            }
             document.getElementById('enrollModal').style.display = 'flex';
         }
         
@@ -539,20 +697,52 @@
             document.getElementById('enrollModal').style.display = 'none';
         }
         
-        function showNotification(message) {
+        function showNotification(message, type = 'success') {
             const notification = document.getElementById('notification');
             notification.textContent = message;
+            notification.style.background = type === 'success' ? '#4caf50' : '#f44336';
             notification.style.display = 'block';
+            
             setTimeout(() => {
                 notification.style.display = 'none';
             }, 3000);
         }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            await login(username, password);
+        }
+
+        // ==================== INITIALIZATION ====================
         
-        // Auto-refresh dashboard every 30 seconds
-        setInterval(loadDashboard, 30000);
-        
-        // Initial load
-        loadDashboard();
+        async function init() {
+            await checkBackendStatus();
+            
+            if (authToken) {
+                // Verify token works
+                const testRes = await apiRequest('/stats');
+                if (testRes && testRes.ok) {
+                    hideLoginModal();
+                    loadDashboard();
+                    // Auto-refresh every 30 seconds
+                    refreshInterval = setInterval(loadDashboard, 30000);
+                } else {
+                    // Token invalid
+                    localStorage.removeItem('mdm_token');
+                    authToken = null;
+                    showLoginModal();
+                }
+            } else {
+                showLoginModal();
+            }
+        }
+
+        // Start the app
+        init();
+
+        // Check backend status every minute
+        setInterval(checkBackendStatus, 60000);
     </script>
 </body>
 </html>
